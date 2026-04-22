@@ -69,9 +69,18 @@ function ratio(semitones, tuning) {
   }
 }
 
-function tonicFrequency(tonicPc, referenceA) {
-  const midi = 48 + tonicPc;
-  return referenceA * Math.pow(2, (midi - 69) / 12);
+// 主音の取り方:
+//   equalTemperament: 基準 A から平均律 12 半音
+//   pythagoreanFromA: 基準 A から純 5 度連鎖（ピタゴラス律）。GDAE が開放弦調弦と一致する。
+function tonicFrequency(tonicPc, referenceA, tonicTuning) {
+  const targetMidi = 48 + tonicPc;
+  const semitoneDiff = targetMidi - 69;
+  if (tonicTuning === "pythagoreanFromA") {
+    const octaves = Math.floor(semitoneDiff / 12);
+    const mod = mod12(semitoneDiff);
+    return referenceA * PYTH_RATIOS[mod] * Math.pow(2, octaves);
+  }
+  return referenceA * Math.pow(2, semitoneDiff / 12);
 }
 
 function droneSemitoneFromTonic(scaleForm, degree) {
@@ -81,7 +90,7 @@ function droneSemitoneFromTonic(scaleForm, degree) {
 }
 
 function droneRootFrequency(cfg) {
-  const t = tonicFrequency(cfg.tonicPitchClass, cfg.referenceA);
+  const t = tonicFrequency(cfg.tonicPitchClass, cfg.referenceA, cfg.tonicTuning);
   const s = droneSemitoneFromTonic(cfg.scaleForm, cfg.droneScaleDegree);
   return t * ratio(s, cfg.tuningSystem);
 }
@@ -378,6 +387,7 @@ function defaultState() {
     tonicPitchClass: 9,        // A
     scaleForm: "major",
     droneScaleDegree: 0,
+    tonicTuning: "pythagoreanFromA",
     tuningSystem: "justIntonation",
     referenceA: 442,
     chordPreset: "triad",
@@ -429,6 +439,7 @@ function configuration() {
     tonicPitchClass: state.tonicPitchClass,
     scaleForm: state.scaleForm,
     droneScaleDegree: state.droneScaleDegree,
+    tonicTuning: state.tonicTuning,
     tuningSystem: state.tuningSystem,
     referenceA: state.referenceA,
     chordPreset: state.chordPreset,
@@ -703,6 +714,11 @@ $("#default-scale").addEventListener("change", (e) => {
 $("#reference-a").value = state.referenceA;
 $("#reference-a").addEventListener("change", (e) => {
   state.referenceA = Number(e.target.value);
+  onConfigChanged();
+});
+$("#tonic-tuning").value = state.tonicTuning;
+$("#tonic-tuning").addEventListener("change", (e) => {
+  state.tonicTuning = e.target.value;
   onConfigChanged();
 });
 $("#sync-quality").checked = state.syncQualityWithScale;

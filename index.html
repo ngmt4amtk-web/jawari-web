@@ -169,6 +169,16 @@
       </select>
     </label>
     <label class="field">
+      <span class="field-label">主音の取り方</span>
+      <select id="tonic-tuning">
+        <option value="pythagoreanFromA">バイオリン調弦 (純5度)</option>
+        <option value="equalTemperament">平均律</option>
+      </select>
+      <small style="color: var(--text-faint); font-size: 11px;">
+        「バイオリン調弦」は基準 A から純 5 度連鎖で全主音を取ります。G-D-A-E は開放弦調弦と完全一致します。
+      </small>
+    </label>
+    <label class="field">
       <span class="field-label">起動時の主音</span>
       <select id="default-tonic"></select>
     </label>
