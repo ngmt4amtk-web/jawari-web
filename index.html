@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0d1f3a" />
+<title>Jawari — 耳の師匠を、ポケットに</title>
+<meta name="description" content="純正律・ピタゴラス・平均律でハモるバイオリン練習用ドローン。メトロノーム＋コード進行。" />
+<link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+
+<header class="topbar">
+  <button id="btn-progression" class="icon-btn" aria-label="メトロノーム">
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8">
+      <path d="M7 3 L17 3 L20 21 L4 21 Z" stroke-linejoin="round"/>
+      <line x1="12" y1="7" x2="16" y2="15" stroke-linecap="round"/>
+    </svg>
+  </button>
+  <h1>Jawari</h1>
+  <button id="btn-settings" class="icon-btn" aria-label="設定">
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="3"/>
+      <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33h0a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51h0a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82v0a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/>
+    </svg>
+  </button>
+</header>
+
+<main class="app">
+
+  <!-- Compact header row -->
+  <div class="row row-header">
+    <button id="scale-menu" class="chip chip-small" aria-haspopup="true">
+      <span id="key-display">A 長調</span>
+      <svg viewBox="0 0 10 6" width="8" height="5" fill="currentColor"><path d="M0 0 L5 6 L10 0 Z"/></svg>
+    </button>
+    <div class="spacer"></div>
+    <div class="meta">
+      <span id="ref-label">A=442</span>
+      <span id="cents-label" class="accent">ET ±0¢</span>
+    </div>
+  </div>
+
+  <!-- Note ring -->
+  <div class="ring-wrap">
+    <svg class="ring-svg" viewBox="-150 -150 300 300" aria-hidden="true">
+      <circle cx="0" cy="0" r="140" fill="rgba(255,255,255,0.03)" />
+      <circle cx="0" cy="0" r="140" fill="none" stroke="url(#ringGrad)" stroke-width="1.2" />
+      <defs>
+        <linearGradient id="ringGrad" x1="0%" x2="100%" y1="0%" y2="100%">
+          <stop offset="0%" stop-color="#edb959"/>
+          <stop offset="50%" stop-color="#70c7a6"/>
+          <stop offset="100%" stop-color="#edb959"/>
+        </linearGradient>
+      </defs>
+    </svg>
+    <div class="ring-buttons" id="ring-buttons"></div>
+    <div class="ring-center">
+      <div class="degree-label" id="ring-degree">Ⅰ</div>
+      <div class="pitch-name" id="ring-pitch">A</div>
+      <div class="hz" id="ring-hz">220.0 Hz</div>
+    </div>
+  </div>
+
+  <!-- Degree pills -->
+  <div class="row row-pills" id="degree-row"></div>
+
+  <!-- Tuning pills -->
+  <div class="row row-pills" id="tuning-row">
+    <button class="pill" data-tuning="equalTemperament">平均律</button>
+    <button class="pill" data-tuning="pythagorean">ピタゴラス</button>
+    <button class="pill active" data-tuning="justIntonation">純正律</button>
+    <button id="btn-tuning-info" class="icon-btn small" aria-label="音律の解説">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="12" y1="8" x2="12" y2="8"/>
+        <line x1="12" y1="12" x2="12" y2="16"/>
+      </svg>
+    </button>
+  </div>
+
+  <!-- Chord pills (horizontal scroll) -->
+  <div class="row row-scroll" id="chord-row"></div>
+
+  <!-- Quality pills (shown only for triad presets) -->
+  <div class="row row-pills" id="quality-row" hidden>
+    <button class="pill small" data-quality="major">メジャー</button>
+    <button class="pill small" data-quality="minor">マイナー</button>
+  </div>
+
+  <!-- Timbre cards (horizontal scroll) -->
+  <div class="row row-scroll" id="timbre-row"></div>
+
+  <div class="bottom-spacer"></div>
+</main>
+
+<!-- Floating play dock -->
+<div class="play-dock">
+  <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">
+    <path d="M3 10v4h4l5 5V5L7 10H3z"/>
+  </svg>
+  <input type="range" id="volume" min="0" max="100" value="72" aria-label="音量" />
+  <button id="play-btn" class="fab" aria-label="再生">
+    <svg class="play-icon" viewBox="0 0 24 24" width="28" height="28" fill="currentColor">
+      <path d="M8 5v14l11-7z"/>
+    </svg>
+    <svg class="stop-icon" viewBox="0 0 24 24" width="26" height="26" fill="currentColor" hidden>
+      <rect x="6" y="6" width="12" height="12" rx="1"/>
+    </svg>
+  </button>
+</div>
+
+<!-- Progression sheet -->
+<div class="sheet" id="sheet-progression" hidden>
+  <div class="sheet-head">
+    <h2>メトロノーム & コード進行</h2>
+    <button class="icon-btn close-btn" data-close="sheet-progression" aria-label="閉じる">&times;</button>
+  </div>
+  <div class="sheet-body">
+    <label class="field">
+      <span class="field-label">BPM</span>
+      <div class="field-row">
+        <input type="range" id="bpm" min="40" max="208" value="80" />
+        <span id="bpm-val" class="num accent">80</span>
+      </div>
+    </label>
+    <label class="field">
+      <span class="field-label">拍子</span>
+      <select id="beats-per-bar">
+        <option value="2">2 / 4</option>
+        <option value="3">3 / 4</option>
+        <option value="4" selected>4 / 4</option>
+        <option value="6">6 / 8</option>
+      </select>
+    </label>
+    <label class="field">
+      <span class="field-label">カウントイン</span>
+      <select id="count-in">
+        <option value="0">なし</option>
+        <option value="1" selected>1 小節</option>
+        <option value="2">2 小節</option>
+      </select>
+    </label>
+    <div class="field">
+      <div class="field-label-row">
+        <span class="field-label">小節ごとのコード</span>
+        <button id="add-bar" class="text-btn">＋ 小節を追加</button>
+      </div>
+      <div id="bars-editor"></div>
+    </div>
+    <button id="progression-toggle" class="big-btn">進行スタート</button>
+    <div class="progression-status" id="progression-status">待機中</div>
+  </div>
+</div>
+
+<!-- Settings sheet -->
+<div class="sheet" id="sheet-settings" hidden>
+  <div class="sheet-head">
+    <h2>設定</h2>
+    <button class="icon-btn close-btn" data-close="sheet-settings" aria-label="閉じる">&times;</button>
+  </div>
+  <div class="sheet-body">
+    <label class="field">
+      <span class="field-label">基準 A (Hz)</span>
+      <select id="reference-a">
+        <option>415</option><option>430</option><option>432</option><option>440</option>
+        <option>441</option><option selected>442</option><option>443</option>
+        <option>444</option><option>446</option><option>466</option>
+      </select>
+    </label>
+    <label class="field">
+      <span class="field-label">起動時の主音</span>
+      <select id="default-tonic"></select>
+    </label>
+    <label class="field">
+      <span class="field-label">起動時のスケール</span>
+      <select id="default-scale"></select>
+    </label>
+    <label class="field check">
+      <input type="checkbox" id="sync-quality" checked />
+      <span>度数に合わせて三度を自動切替</span>
+    </label>
+    <div class="note">
+      Jawari はネットワーク通信も追跡もトラッキングもしません。設定は端末内にのみ保存されます。
+    </div>
+    <button id="btn-about" class="big-btn ghost">このアプリについて</button>
+  </div>
+</div>
+
+<!-- Tuning info sheet -->
+<div class="sheet" id="sheet-tuning" hidden>
+  <div class="sheet-head">
+    <h2>音律について</h2>
+    <button class="icon-btn close-btn" data-close="sheet-tuning" aria-label="閉じる">&times;</button>
+  </div>
+  <div class="sheet-body">
+    <p class="intro">Jawari は「曲の調（主音）」と「ドローンの度数」を分けて扱います。音律は主音からドローンまでの音程と、ドローン和音の内部音程に対して適用されます。同じ C でも C 長調のⅠ度と G 長調のⅣ度では、純正律では絶対周波数が違います。これが和音の中で本当にハモるバイオリン奏者的な音程感覚です。</p>
+
+    <h3>平均律</h3>
+    <p>1 オクターブを 12 等分した現代の標準。どの調に移っても響きが同じで、すべての協和音がわずかに濁るのが特徴です。</p>
+
+    <h3>ピタゴラス</h3>
+    <p>主音から純 5 度（3:2）の連鎖で構築した古典音律。5 度と 4 度は綺麗に澄むが、長 3 度 (81:64) は平均律より +7.8 セント広く、旋律として歌いやすい。バイオリンの旋律で好まれる並び。</p>
+
+    <h3>純正律</h3>
+    <p>主音に対して 3 度 5:4、5 度 3:2、6 度 5:3 の整数比。長 3 度は平均律より -13.7 セント低く、和音のハモリ密度が段違いに上がる。合奏とコード練習の相棒。</p>
+  </div>
+</div>
+
+<!-- About sheet -->
+<div class="sheet" id="sheet-about" hidden>
+  <div class="sheet-head">
+    <h2>Jawari について</h2>
+    <button class="icon-btn close-btn" data-close="sheet-about" aria-label="閉じる">&times;</button>
+  </div>
+  <div class="sheet-body">
+    <p><strong>耳の師匠を、ポケットに。</strong></p>
+    <p>タンブーラの駒「ジャワリ」が倍音を爆発的に引き出すように、楽器の音程を引き締めるドローン。川越バイオリン教室での日々のレッスンから生まれた、教師と生徒のためのドローン。</p>
+
+    <h3>倍音プロファイル</h3>
+    <p>Pure Sine は基音のみ。Warm Pad は第 2〜8 倍音を 0.40/0.30/0.20/0.15/0.10/0.05/0.03 の比率で加算。Bright Organ は奇数倍音 3/5/7/9/11/13/15 を 0.50/0.40/0.30/0.20/0.15/0.10/0.10 の比率で加算しています。</p>
+
+    <h3>プライバシー</h3>
+    <p>ネットワーク通信、解析、広告 SDK、トラッキングは一切使用しません。設定情報は端末内（localStorage）にのみ保存されます。</p>
+
+    <p class="meta-line">開発元: ngmt4amtk / サポート: ngmt4a.mtk@gmail.com</p>
+    <p class="meta-line">ネイティブ iOS 版: 開発中（App Store リリース予定）</p>
+  </div>
+</div>
+
+<div class="backdrop" id="backdrop" hidden></div>
+
+<script src="js/app.js" type="module"></script>
+</body>
+</html>
