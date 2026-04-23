@@ -70,17 +70,43 @@ function ratio(semitones, tuning) {
 }
 
 // 主音の取り方:
-//   equalTemperament: 基準 A から平均律 12 半音
-//   pythagoreanFromA: 基準 A から純 5 度連鎖（ピタゴラス律）。GDAE が開放弦調弦と一致する。
+//   pythagoreanFromA: 独奏・無伴奏。基準 A から純 5 度連鎖（ピタゴラス律）。GDAE が開放弦調弦と一致。
+//   equalTemperament: ピアノ伴奏。基準 A から平均律 12 等分。
+//   temperedFifthChain: 弦楽合奏。基準 A から 5 度を -2¢ 狭めた連鎖。コンマを 12 箇所に分散する折衷調弦。
+const ENSEMBLE_FIFTH_NARROW_CENTS = 2.0;
+
+function fifthCircleDistanceFromA(semitoneInOctave) {
+  // s = mod12(7n), 12 法での 7 の逆元は 7。 n ≡ 7s mod 12、これを -5..+6 に折り畳む。
+  const rawN = (semitoneInOctave * 7) % 12;
+  return rawN > 6 ? rawN - 12 : rawN;
+}
+
+function normalizeToOctave(ratio) {
+  let r = ratio;
+  while (r < 1.0) r *= 2.0;
+  while (r >= 2.0) r /= 2.0;
+  return r;
+}
+
 function tonicFrequency(tonicPc, referenceA, tonicTuning) {
   const targetMidi = 48 + tonicPc;
   const semitoneDiff = targetMidi - 69;
-  if (tonicTuning === "pythagoreanFromA") {
-    const octaves = Math.floor(semitoneDiff / 12);
-    const mod = mod12(semitoneDiff);
-    return referenceA * PYTH_RATIOS[mod] * Math.pow(2, octaves);
+  const octaves = Math.floor(semitoneDiff / 12);
+  const mod = mod12(semitoneDiff);
+
+  switch (tonicTuning) {
+    case "pythagoreanFromA":
+      return referenceA * PYTH_RATIOS[mod] * Math.pow(2, octaves);
+    case "temperedFifthChain": {
+      const fifthSteps = fifthCircleDistanceFromA(mod);
+      const narrowedFifth = 1.5 * Math.pow(2, -ENSEMBLE_FIFTH_NARROW_CENTS / 1200);
+      const raw = Math.pow(narrowedFifth, fifthSteps);
+      return referenceA * normalizeToOctave(raw) * Math.pow(2, octaves);
+    }
+    case "equalTemperament":
+    default:
+      return referenceA * Math.pow(2, semitoneDiff / 12);
   }
-  return referenceA * Math.pow(2, semitoneDiff / 12);
 }
 
 function droneSemitoneFromTonic(scaleForm, degree) {
@@ -646,10 +672,31 @@ $("#volume").addEventListener("input", (e) => {
 $("#volume").value = Math.round(state.volume * 100);
 
 // ========================================
-// Sheets
+// View navigation (menu / drone / progression / reading / article)
 // ========================================
 
-const sheets = ["sheet-progression", "sheet-settings", "sheet-tuning", "sheet-about"];
+const VIEWS = ["view-menu", "view-drone", "view-progression", "view-reading", "view-article"];
+
+function navigate(target) {
+  const id = "view-" + target;
+  VIEWS.forEach((v) => ($("#" + v).hidden = v !== id));
+  if (target === "progression") renderBarsEditor();
+  if (target === "drone") {
+    // Ensure ring is laid out correctly after a view change
+    requestAnimationFrame(() => renderRingButtons());
+  }
+  window.scrollTo(0, 0);
+}
+
+$$("[data-nav]").forEach((el) => {
+  el.addEventListener("click", () => navigate(el.dataset.nav));
+});
+
+// ========================================
+// Sheets (settings / tuning info only)
+// ========================================
+
+const sheets = ["sheet-settings", "sheet-tuning"];
 
 function openSheet(id) {
   sheets.forEach((s) => ($("#" + s).hidden = s !== id));
@@ -663,13 +710,81 @@ function closeAllSheets() {
 $("#backdrop").addEventListener("click", closeAllSheets);
 $$(".close-btn").forEach(btn => btn.addEventListener("click", closeAllSheets));
 
-$("#btn-progression").addEventListener("click", () => {
-  renderBarsEditor();
-  openSheet("sheet-progression");
-});
 $("#btn-settings").addEventListener("click", () => openSheet("sheet-settings"));
 $("#btn-tuning-info").addEventListener("click", () => openSheet("sheet-tuning"));
-$("#btn-about").addEventListener("click", () => openSheet("sheet-about"));
+
+// ========================================
+// Reading articles
+// ========================================
+
+const READING_ARTICLES = {
+  tonicTuning: {
+    title: "主音の取り方",
+    html: `
+<p class="intro">Jawari は「主音の絶対周波数」を 3 つの場面から選べるように設計しました。弦楽器の長い伝統、20 世紀半ばから現代までの学術研究、現役ソリストの証言を踏まえた 3 つの立場です。</p>
+
+<h3>1. 独奏・無伴奏（デフォルト）</h3>
+<p>基準 A から純 5 度連鎖（ピタゴラス律）で全主音を取ります。G-D-A-E が開放弦の調弦と完全一致。Greene 1949、Nickerson 1949、Loosen 1995 の実測研究で確認された、弦楽器奏者が無伴奏で旋律を弾くときの実態です。長 3 度は平均律より約 8 セント広く、導音は解決音に近く、「Leading tones should lead」というカザルス以来の原則そのもの。無伴奏バッハ、スケール練習、重音の基準音作りに向きます。</p>
+
+<h3>2. ピアノ伴奏</h3>
+<p>基準 A から平均律 12 等分で主音を取ります。ピアノ・鍵盤・電子楽器・管楽器と合わせるときの標準。開放弦 D や G と平均律の主音との間には 5〜8 セントの差が残りますが、ピアノの主音と一致する方を優先します。ベートーヴェンやブラームスのバイオリンソナタ、ピアノ伴奏付き協奏曲の練習に向きます。</p>
+
+<h3>3. 弦楽合奏</h3>
+<p>基準 A から 5 度を -2 セント狭めた連鎖で全主音を取る折衷調弦。純 5 度をそのまま 12 回重ねるとピタゴラス・コンマ（23.5¢）が 1 箇所に集中して、主調から離れた調で和音が破綻します。この問題を避けるため、ほんの少しだけ 5 度を狭めてコンマを 12 箇所に分散させます。弦楽四重奏でバイオリンの E を下げて純正長 3 度を優先する実践と同じ発想です。弦楽四重奏やオーケストラの中で合奏練習するときに向きます。</p>
+
+<h3>同じ C でも調によって違う</h3>
+<p>Jawari はさらに「その主音から何度の音をドローンにするか」を指定する 2 段階構造です。C メジャーのⅠ度の C と、G メジャーのⅣ度の C は、純正律では約 2 セント違う絶対周波数で鳴ります。これは弦楽器奏者が無意識にやっている動的音程 (dynamic intonation) の本質で、ピアノという固定音程楽器では表現できない弦楽器の本質的な表現の幅です。</p>
+
+<h3>使い分けの目安</h3>
+<p>ソロ・無伴奏・重音作り → 独奏モード。ピアノと合わせるとき → ピアノ伴奏モード。弦楽カルテットや合奏練習 → 弦楽合奏モード。迷ったら独奏モードから始めてください。どのモードでも、和音（ドローン音を根とした 3 度・5 度・オクターブ）は選んだ音律で鳴ります。つまりⅠ度 + 純正律のトライアドなら、どのモードでも内部はピッタリ純正にハモります。</p>
+`
+  },
+  tunings: {
+    title: "音律について",
+    html: `
+<p class="intro">Jawari は「曲の調（主音）」と「ドローンの度数」を分けて扱います。音律は主音からドローンまでの音程、およびドローン和音の内部音程に適用されます。同じ C でも C 長調のⅠ度と G 長調のⅣ度では、純正律では絶対周波数が違います。</p>
+
+<h3>平均律</h3>
+<p>1 オクターブを 12 等分した現代の標準。どの調に移っても響きが同じで、すべての協和音がわずかに濁るのが特徴です。</p>
+
+<h3>ピタゴラス</h3>
+<p>主音から純 5 度（3:2）の連鎖で構築した古典音律。5 度と 4 度は綺麗に澄むが、長 3 度 (81:64) は平均律より +7.8 セント広く、旋律として歌いやすい。バイオリンの旋律で好まれる並び。</p>
+
+<h3>純正律</h3>
+<p>主音に対して 3 度 5:4、5 度 3:2、6 度 5:3 の整数比。長 3 度は平均律より -13.7 セント低く、和音のハモリ密度が段違いに上がる。合奏とコード練習の相棒。</p>
+`
+  },
+  harmonics: {
+    title: "倍音プロファイル",
+    html: `
+<p>Pure Sine は基音のみ。Warm Pad は第 2〜8 倍音を 0.40/0.30/0.20/0.15/0.10/0.05/0.03 の比率で加算。Bright Organ は奇数倍音 3/5/7/9/11/13/15 を 0.50/0.40/0.30/0.20/0.15/0.10/0.10 の比率で加算しています。Tambura と Cello は加算合成による近似です（将来サンプル音源に差し替え予定）。</p>
+<p>iOS 版では Goertzel DFT による倍音強度の実測テストを自動実行しており、仕様書設計値と±0.07 以内で一致していることを数値で保証しています。</p>
+`
+  },
+  about: {
+    title: "このアプリについて",
+    html: `
+<h3>コンセプト</h3>
+<p>タンブーラの駒「ジャワリ」が倍音を爆発的に引き出すように、楽器の音程を引き締めるドローン。川越バイオリン教室での日々のレッスンから生まれた、教師と生徒のためのドローンです。</p>
+
+<h3>プライバシー</h3>
+<p>ネットワーク通信、解析、広告 SDK、トラッキングは一切使用しません。設定情報は端末内（localStorage）にのみ保存されます。</p>
+
+<p class="meta-line">開発元: ngmt4amtk / サポート: ngmt4a.mtk@gmail.com</p>
+<p class="meta-line">ネイティブ iOS 版: 開発中（App Store リリース予定）</p>
+`
+  }
+};
+
+$$("[data-reading]").forEach((el) => {
+  el.addEventListener("click", () => {
+    const art = READING_ARTICLES[el.dataset.reading];
+    if (!art) return;
+    $("#article-title").textContent = art.title;
+    $("#article-body").innerHTML = art.html;
+    navigate("article");
+  });
+});
 
 // ========================================
 // Settings pickers
@@ -716,9 +831,22 @@ $("#reference-a").addEventListener("change", (e) => {
   state.referenceA = Number(e.target.value);
   onConfigChanged();
 });
+const TONIC_TUNING_DETAIL = {
+  pythagoreanFromA: "基準 A から純 5 度連鎖（ピタゴラス律）。G-D-A-E が開放弦調弦と完全一致。無伴奏・独奏・スケール練習の標準。Greene 1949 / Nickerson 1949 / Loosen 1995 で実測された弦楽奏者の自然な実態。",
+  equalTemperament: "基準 A から平均律 12 等分。ピアノ・鍵盤・管楽器と合わせるときの標準。開放弦との間に 5〜8¢ の差が残るが、ピアノの主音と一致する方を優先します。",
+  temperedFifthChain: "基準 A から 5 度を -2¢ 狭めた連鎖。ピタゴラス・コンマを 12 箇所に分散し、どの調に移っても破綻しない折衷調弦。弦楽四重奏で純正長 3 度を優先する実践と整合します。"
+};
+
+function updateTonicTuningDetail() {
+  const el = document.getElementById("tonic-tuning-detail");
+  if (el) el.textContent = TONIC_TUNING_DETAIL[state.tonicTuning] || "";
+}
+
 $("#tonic-tuning").value = state.tonicTuning;
+updateTonicTuningDetail();
 $("#tonic-tuning").addEventListener("change", (e) => {
   state.tonicTuning = e.target.value;
+  updateTonicTuningDetail();
   onConfigChanged();
 });
 $("#sync-quality").checked = state.syncQualityWithScale;

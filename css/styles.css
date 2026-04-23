@@ -506,3 +506,194 @@ select, input[type="text"], input[type="number"] {
   .app { gap: 18px; }
   .ring-wrap { max-width: 380px; }
 }
+
+/* =========================================== */
+/* Multi-view navigation                       */
+/* =========================================== */
+
+.view[hidden] { display: none; }
+
+/* Menu view */
+.view-menu {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 22px;
+  gap: 24px;
+  max-width: 520px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.menu-hero {
+  text-align: center;
+  margin-top: 20px;
+  margin-bottom: 10px;
+}
+.menu-title {
+  font-size: 42px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  margin: 0 0 6px;
+  color: var(--text);
+}
+.menu-tagline {
+  color: var(--text-dim);
+  font-size: 13px;
+  font-weight: 500;
+  margin: 0;
+}
+
+.menu-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+  max-width: 420px;
+  margin: 0 auto;
+}
+
+.menu-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+  color: var(--text);
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  transition: transform 0.1s, background 0.15s;
+}
+.menu-card:active { transform: scale(0.98); }
+.menu-card:hover { background: rgba(255, 255, 255, 0.08); }
+.menu-card.primary {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(237, 185, 89, 0.4);
+}
+.menu-card-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.menu-card.primary .menu-card-icon {
+  background: var(--gold);
+  color: #1a1005;
+}
+.menu-card-text { flex: 1; min-width: 0; }
+.menu-card-text h3 {
+  font-size: 16px;
+  font-weight: 700;
+  margin: 0 0 4px;
+  color: var(--text);
+}
+.menu-card-text p {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin: 0;
+  line-height: 1.4;
+}
+.menu-card-arrow {
+  color: var(--text-faint);
+  font-size: 22px;
+  font-weight: 300;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.menu-footer {
+  text-align: center;
+  color: var(--text-faint);
+  font-size: 11px;
+  margin: 0;
+  padding: 0 20px;
+  line-height: 1.6;
+}
+
+/* Back button in top bars */
+.back-btn {
+  padding: 8px;
+  margin-left: -6px;
+}
+
+.topbar h1 {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+/* Standalone sheet body (used in progression / reading views) */
+.sheet-body.standalone {
+  flex: 1;
+  max-width: 520px;
+  margin: 0 auto;
+  width: 100%;
+  padding-bottom: 40px;
+}
+
+.sheet-body.article {
+  max-width: 640px;
+  margin: 0 auto;
+  width: 100%;
+  padding: 20px 22px 60px;
+}
+.sheet-body.article h3 {
+  color: var(--text);
+  font-size: 15px;
+  margin: 20px 0 8px;
+}
+.sheet-body.article p {
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--text-dim);
+  margin: 0 0 12px;
+}
+.sheet-body.article p.intro {
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.7;
+  padding: 14px 16px;
+  background: rgba(237, 185, 89, 0.08);
+  border-radius: 12px;
+  margin-bottom: 18px;
+}
+.sheet-body.article .meta-line {
+  font-size: 12px;
+  color: var(--text-faint);
+}
+.sheet-body.article ul { padding-left: 20px; color: var(--text-dim); font-size: 14px; line-height: 1.7; }
+
+/* Reading list cards */
+.reading-card {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  color: var(--text);
+  cursor: pointer;
+  font-family: inherit;
+  margin-bottom: 10px;
+  transition: background 0.15s;
+}
+.reading-card:hover { background: rgba(255, 255, 255, 0.08); }
+.reading-card-title {
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+.reading-card-sub {
+  font-size: 12px;
+  color: var(--text-dim);
+}
