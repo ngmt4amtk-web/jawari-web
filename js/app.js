@@ -1,5 +1,5 @@
-// Jawari Web — 耳の師匠を、ポケットに
-// iOS版 Jawari と等価の音律ロジック & 加算合成をブラウザで実装。
+// ドローンサウンド by 川越バイオリン教室 — Web 版
+// iOS 版と等価の音律ロジック & 加算合成をブラウザで実装。
 
 // ========================================
 // Model: pitch classes, scales, tunings, chords
@@ -88,7 +88,10 @@ function normalizeToOctave(ratio) {
   return r;
 }
 
-function tonicFrequency(tonicPc, referenceA, tonicTuning) {
+function tonicFrequency(tonicPc, referenceA, tonicTuning, customTonicHz = 256) {
+  if (tonicTuning === "customHz") {
+    return Math.max(1, customTonicHz);
+  }
   const targetMidi = 48 + tonicPc;
   const semitoneDiff = targetMidi - 69;
   const octaves = Math.floor(semitoneDiff / 12);
@@ -116,7 +119,7 @@ function droneSemitoneFromTonic(scaleForm, degree) {
 }
 
 function droneRootFrequency(cfg) {
-  const t = tonicFrequency(cfg.tonicPitchClass, cfg.referenceA, cfg.tonicTuning);
+  const t = tonicFrequency(cfg.tonicPitchClass, cfg.referenceA, cfg.tonicTuning, cfg.customTonicHz);
   const s = droneSemitoneFromTonic(cfg.scaleForm, cfg.droneScaleDegree);
   return t * ratio(s, cfg.tuningSystem);
 }
@@ -325,7 +328,7 @@ class Progression {
     this.timer = null;
   }
 
-  start(plan, onRequireConfig) {
+  start(plan, onCountInComplete) {
     if (this.running) return;
     this.running = true;
     const beatMs = 60000 / plan.bpm;
@@ -335,9 +338,15 @@ class Progression {
     let barIdx = 0;
     let ticksDone = 0;
     const plan_ = plan;
+    const done = typeof onCountInComplete === "function" ? onCountInComplete : () => {};
 
     // Set first bar's chord immediately (used during count-in too)
     this.onBarChange({ barIdx: 0, beatIdx: 0, phase, remaining: countInBeats });
+
+    // カウントインがなければ本番開始時に drone を開始
+    if (phase === "main") {
+      done();
+    }
 
     const tick = () => {
       if (!this.running) return;
@@ -355,6 +364,8 @@ class Progression {
           beatIdx = 0;
           barIdx = 0;
           ticksDone = 0;
+          // カウントイン完了 → drone 開始
+          done();
           // Immediately at downbeat of bar 0:
           this.engine.playClick(plan_.accentFirstBeat);
           this.onBarChange({ barIdx: 0, beatIdx: 0, phase, remaining: 0 });
@@ -363,9 +374,6 @@ class Progression {
           if (beatIdx >= plan_.beatsPerBar) {
             beatIdx = 0;
             barIdx = (barIdx + 1) % plan_.bars.length;
-            if (barIdx === 0) {
-              // stay at bar 0 (wrap already done)
-            }
             this.onBarChange({ barIdx, beatIdx: 0, phase, remaining: 0 });
           }
         }
@@ -416,6 +424,7 @@ function defaultState() {
     tonicTuning: "pythagoreanFromA",
     tuningSystem: "justIntonation",
     referenceA: 442,
+    customTonicHz: 256,
     chordPreset: "triad",
     quality: "major",
     timbre: "warmPad",
@@ -424,6 +433,7 @@ function defaultState() {
     progression: {
       bpm: 80,
       beatsPerBar: 4,
+      beatUnit: 4,
       countInBars: 1,
       accentFirstBeat: true,
       bars: [
@@ -440,7 +450,13 @@ function loadState() {
   try {
     const s = localStorage.getItem(STORAGE_KEY);
     if (!s) return defaultState();
-    return { ...defaultState(), ...JSON.parse(s) };
+    const parsed = JSON.parse(s);
+    const def = defaultState();
+    return {
+      ...def,
+      ...parsed,
+      progression: { ...def.progression, ...(parsed.progression || {}) }
+    };
   } catch {
     return defaultState();
   }
@@ -468,6 +484,7 @@ function configuration() {
     tonicTuning: state.tonicTuning,
     tuningSystem: state.tuningSystem,
     referenceA: state.referenceA,
+    customTonicHz: state.customTonicHz,
     chordPreset: state.chordPreset,
     quality: state.quality,
     timbre: state.timbre,
@@ -721,7 +738,7 @@ const READING_ARTICLES = {
   tonicTuning: {
     title: "主音の取り方",
     html: `
-<p class="intro">Jawari は「主音の絶対周波数」を 3 つの場面から選べるように設計しました。弦楽器の長い伝統、20 世紀半ばから現代までの学術研究、現役ソリストの証言を踏まえた 3 つの立場です。</p>
+<p class="intro">本アプリは「主音の絶対周波数」を 3 つの場面から選べるように設計しました。弦楽器の長い伝統、20 世紀半ばから現代までの学術研究、現役ソリストの証言を踏まえた 3 つの立場です。</p>
 
 <h3>1. 独奏・無伴奏（デフォルト）</h3>
 <p>基準 A から純 5 度連鎖（ピタゴラス律）で全主音を取ります。G-D-A-E が開放弦の調弦と完全一致。Greene 1949、Nickerson 1949、Loosen 1995 の実測研究で確認された、弦楽器奏者が無伴奏で旋律を弾くときの実態です。長 3 度は平均律より約 8 セント広く、導音は解決音に近く、「Leading tones should lead」というカザルス以来の原則そのもの。無伴奏バッハ、スケール練習、重音の基準音作りに向きます。</p>
@@ -733,7 +750,7 @@ const READING_ARTICLES = {
 <p>基準 A から 5 度を -2 セント狭めた連鎖で全主音を取る折衷調弦。純 5 度をそのまま 12 回重ねるとピタゴラス・コンマ（23.5¢）が 1 箇所に集中して、主調から離れた調で和音が破綻します。この問題を避けるため、ほんの少しだけ 5 度を狭めてコンマを 12 箇所に分散させます。弦楽四重奏でバイオリンの E を下げて純正長 3 度を優先する実践と同じ発想です。弦楽四重奏やオーケストラの中で合奏練習するときに向きます。</p>
 
 <h3>同じ C でも調によって違う</h3>
-<p>Jawari はさらに「その主音から何度の音をドローンにするか」を指定する 2 段階構造です。C メジャーのⅠ度の C と、G メジャーのⅣ度の C は、純正律では約 2 セント違う絶対周波数で鳴ります。これは弦楽器奏者が無意識にやっている動的音程 (dynamic intonation) の本質で、ピアノという固定音程楽器では表現できない弦楽器の本質的な表現の幅です。</p>
+<p>本アプリはさらに「その主音から何度の音をドローンにするか」を指定する 2 段階構造です。C メジャーのⅠ度の C と、G メジャーのⅣ度の C は、純正律では約 2 セント違う絶対周波数で鳴ります。これは弦楽器奏者が無意識にやっている動的音程 (dynamic intonation) の本質で、ピアノという固定音程楽器では表現できない弦楽器の本質的な表現の幅です。</p>
 
 <h3>使い分けの目安</h3>
 <p>ソロ・無伴奏・重音作り → 独奏モード。ピアノと合わせるとき → ピアノ伴奏モード。弦楽カルテットや合奏練習 → 弦楽合奏モード。迷ったら独奏モードから始めてください。どのモードでも、和音（ドローン音を根とした 3 度・5 度・オクターブ）は選んだ音律で鳴ります。つまりⅠ度 + 純正律のトライアドなら、どのモードでも内部はピッタリ純正にハモります。</p>
@@ -742,7 +759,7 @@ const READING_ARTICLES = {
   tunings: {
     title: "音律について",
     html: `
-<p class="intro">Jawari は「曲の調（主音）」と「ドローンの度数」を分けて扱います。音律は主音からドローンまでの音程、およびドローン和音の内部音程に適用されます。同じ C でも C 長調のⅠ度と G 長調のⅣ度では、純正律では絶対周波数が違います。</p>
+<p class="intro">本アプリは「曲の調（主音）」と「ドローンの度数」を分けて扱います。音律は主音からドローンまでの音程、およびドローン和音の内部音程に適用されます。同じ C でも C 長調のⅠ度と G 長調のⅣ度では、純正律では絶対周波数が違います。</p>
 
 <h3>平均律</h3>
 <p>1 オクターブを 12 等分した現代の標準。どの調に移っても響きが同じで、すべての協和音がわずかに濁るのが特徴です。</p>
@@ -834,12 +851,15 @@ $("#reference-a").addEventListener("change", (e) => {
 const TONIC_TUNING_DETAIL = {
   pythagoreanFromA: "基準 A から純 5 度連鎖（ピタゴラス律）。G-D-A-E が開放弦調弦と完全一致。無伴奏・独奏・スケール練習の標準。Greene 1949 / Nickerson 1949 / Loosen 1995 で実測された弦楽奏者の自然な実態。",
   equalTemperament: "基準 A から平均律 12 等分。ピアノ・鍵盤・管楽器と合わせるときの標準。開放弦との間に 5〜8¢ の差が残るが、ピアノの主音と一致する方を優先します。",
-  temperedFifthChain: "基準 A から 5 度を -2¢ 狭めた連鎖。ピタゴラス・コンマを 12 箇所に分散し、どの調に移っても破綻しない折衷調弦。弦楽四重奏で純正長 3 度を優先する実践と整合します。"
+  temperedFifthChain: "基準 A から 5 度を -2¢ 狭めた連鎖。ピタゴラス・コンマを 12 箇所に分散し、どの調に移っても破綻しない折衷調弦。弦楽四重奏で純正長 3 度を優先する実践と整合します。",
+  customHz: "主音の絶対周波数を Hz で直接指定します。ピッチクラス選択は無視され、指定した Hz がⅠ度（主音）になります。そこから選んだ音律と度数で上に音程を積みます。任意の基音に対して純正律で響きを確かめる用途に。"
 };
 
 function updateTonicTuningDetail() {
   const el = document.getElementById("tonic-tuning-detail");
   if (el) el.textContent = TONIC_TUNING_DETAIL[state.tonicTuning] || "";
+  const customField = document.getElementById("custom-hz-field");
+  if (customField) customField.hidden = state.tonicTuning !== "customHz";
 }
 
 $("#tonic-tuning").value = state.tonicTuning;
@@ -847,6 +867,14 @@ updateTonicTuningDetail();
 $("#tonic-tuning").addEventListener("change", (e) => {
   state.tonicTuning = e.target.value;
   updateTonicTuningDetail();
+  onConfigChanged();
+});
+
+$("#custom-hz").value = state.customTonicHz;
+$("#custom-hz").addEventListener("input", (e) => {
+  const v = Number(e.target.value);
+  if (!Number.isFinite(v) || v <= 0) return;
+  state.customTonicHz = Math.min(Math.max(v, 20), 8000);
   onConfigChanged();
 });
 $("#sync-quality").checked = state.syncQualityWithScale;
@@ -862,17 +890,35 @@ $("#sync-quality").addEventListener("change", (e) => {
 // Progression editor
 // ========================================
 
+function clampBpm(v) {
+  if (!Number.isFinite(v)) return state.progression.bpm;
+  return Math.min(Math.max(Math.round(v), 20), 300);
+}
+
 $("#bpm").value = state.progression.bpm;
-$("#bpm-val").textContent = state.progression.bpm;
+$("#bpm-input").value = state.progression.bpm;
 $("#bpm").addEventListener("input", (e) => {
-  state.progression.bpm = Number(e.target.value);
-  $("#bpm-val").textContent = state.progression.bpm;
+  state.progression.bpm = clampBpm(Number(e.target.value));
+  $("#bpm-input").value = state.progression.bpm;
   saveState();
 });
+$("#bpm-input").addEventListener("input", (e) => {
+  const v = Number(e.target.value);
+  if (!Number.isFinite(v)) return;
+  state.progression.bpm = clampBpm(v);
+  $("#bpm").value = state.progression.bpm;
+  saveState();
+});
+$("#bpm-input").addEventListener("blur", () => {
+  // 入力終了時に正式値へスナップ
+  $("#bpm-input").value = state.progression.bpm;
+});
 
-$("#beats-per-bar").value = state.progression.beatsPerBar;
+$("#beats-per-bar").value = `${state.progression.beatsPerBar}-${state.progression.beatUnit || 4}`;
 $("#beats-per-bar").addEventListener("change", (e) => {
-  state.progression.beatsPerBar = Number(e.target.value);
+  const [num, denom] = e.target.value.split("-").map(Number);
+  state.progression.beatsPerBar = num;
+  state.progression.beatUnit = denom;
   saveState();
 });
 
@@ -959,11 +1005,18 @@ $("#progression-toggle").addEventListener("click", () => {
   if (progression.running) {
     progression.stop();
   } else {
-    if (!engine.isPlaying) {
-      engine.setPlaying(true);
+    // カウントイン中はクリック音のみ鳴らしたいので drone は開始しない。
+    // 既に drone が鳴っていてもカウントインありならいったん停止する（count-in 終了時に再開）。
+    if (state.progression.countInBars > 0 && engine.isPlaying) {
+      engine.setPlaying(false);
       renderPlayButton();
     }
-    progression.start(state.progression);
+    progression.start(state.progression, () => {
+      if (!engine.isPlaying) {
+        engine.setPlaying(true);
+        renderPlayButton();
+      }
+    });
   }
   updateProgressionButton();
 });
