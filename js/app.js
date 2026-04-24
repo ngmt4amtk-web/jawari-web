@@ -914,6 +914,16 @@ $("#bpm-input").addEventListener("blur", () => {
   $("#bpm-input").value = state.progression.bpm;
 });
 
+// 有効な拍子セット (iOS版 TimeSignature.options と一致)
+const TIME_SIG_OPTIONS = ["2-4", "4-4", "3-4", "3-8", "6-8"];
+(function normalizeTimeSig() {
+  const key = `${state.progression.beatsPerBar}-${state.progression.beatUnit || 4}`;
+  if (!TIME_SIG_OPTIONS.includes(key)) {
+    state.progression.beatsPerBar = 4;
+    state.progression.beatUnit = 4;
+    saveState();
+  }
+})();
 $("#beats-per-bar").value = `${state.progression.beatsPerBar}-${state.progression.beatUnit || 4}`;
 $("#beats-per-bar").addEventListener("change", (e) => {
   const [num, denom] = e.target.value.split("-").map(Number);
