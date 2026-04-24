@@ -221,6 +221,13 @@ class DroneEngine {
     this.weakClick = null;
     this.isPlaying = false;
     this.configuration = null;
+    this.scheduledClickSources = [];
+  }
+
+  ctxOrEnsure() {
+    this._ensureContext();
+    if (this.ctx.state === "suspended") this.ctx.resume();
+    return this.ctx;
   }
 
   _ensureContext() {
@@ -306,12 +313,34 @@ class DroneEngine {
   }
 
   playClick(accent) {
+    this.playClickAt(accent, 0);
+  }
+
+  playClickAt(accent, when) {
     this._ensureContext();
     if (this.ctx.state === "suspended") this.ctx.resume();
     const src = this.ctx.createBufferSource();
     src.buffer = accent ? this.strongClick : this.weakClick;
     src.connect(this.ctx.destination);
-    src.start();
+    const startTime = when > 0 ? when : 0; // 0 = 即時 (start() にそのまま渡せる)
+    src.start(startTime);
+    this.scheduledClickSources.push(src);
+    // 再生終了後に参照を掃除 (リーク防止)
+    src.onended = () => {
+      const idx = this.scheduledClickSources.indexOf(src);
+      if (idx >= 0) this.scheduledClickSources.splice(idx, 1);
+    };
+  }
+
+  cancelScheduledClicks() {
+    const now = this.ctx ? this.ctx.currentTime : 0;
+    for (const src of this.scheduledClickSources) {
+      try {
+        // 既に再生済みの source に対する stop は無害
+        src.stop(now);
+      } catch (_) { /* already stopped */ }
+    }
+    this.scheduledClickSources = [];
   }
 }
 
@@ -319,6 +348,11 @@ class DroneEngine {
 // Progression controller (metronome + chord switching)
 // ========================================
 
+// Web Audio のサンプル精度オーディオクロックを使った先読みスケジューラ。
+// setTimeout ベースだと tick ごとに作業時間＋イベントループ遅延が乗って
+// テンポが指定 BPM より遅くズレる。ここでは ctx.currentTime で絶対時刻をもって
+// 次ビートを予約し、setTimeout は「そろそろ予約時刻に近づいたか」を見るだけの
+// ループに使う (look-ahead scheduler パターン)。
 class Progression {
   constructor(engine, onStatusChange, onBarChange) {
     this.engine = engine;
@@ -331,76 +365,85 @@ class Progression {
   start(plan, onCountInComplete) {
     if (this.running) return;
     this.running = true;
-    const beatMs = 60000 / plan.bpm;
+    const beatSec = 60 / plan.bpm;
     const countInBeats = Math.max(0, plan.countInBars) * plan.beatsPerBar;
-    let phase = countInBeats > 0 ? "countin" : "main";
-    let beatIdx = 0;
-    let barIdx = 0;
-    let ticksDone = 0;
     const plan_ = plan;
     const done = typeof onCountInComplete === "function" ? onCountInComplete : () => {};
 
     // Set first bar's chord immediately (used during count-in too)
-    this.onBarChange({ barIdx: 0, beatIdx: 0, phase, remaining: countInBeats });
+    this.onBarChange({ barIdx: 0, beatIdx: 0, phase: countInBeats > 0 ? "countin" : "main", remaining: countInBeats });
+    if (countInBeats === 0) done();
 
-    // カウントインがなければ本番開始時に drone を開始
-    if (phase === "main") {
-      done();
-    }
+    const ctx = this.engine.ctxOrEnsure();
+    // ほんの少し先の時刻を開始点にして、最初のクリックにスケジューリング余裕を持たせる
+    const startAudioTime = ctx.currentTime + 0.05;
+    let beatCounter = 0;     // 次にスケジュールすべきビート (0=最初)
+    let scheduledThru = -1;  // 既にスケジュール済みのビート番号
 
-    const tick = () => {
-      if (!this.running) return;
+    const LOOK_AHEAD_SEC = 0.15;          // 150ms 先まで予約
+    const SCHEDULER_INTERVAL_MS = 25;     // スケジューラ起動頻度
 
-      if (phase === "countin") {
-        const localBeat = ticksDone;
-        const isFirstBeat = (localBeat % plan_.beatsPerBar) === 0;
-        const accent = plan_.accentFirstBeat && isFirstBeat;
-        this.engine.playClick(accent);
-        const remaining = countInBeats - localBeat;
-        this.onStatusChange({ phase, remaining, barIdx: 0, beatIdx: localBeat % plan_.beatsPerBar });
-        ticksDone++;
-        if (ticksDone >= countInBeats) {
-          // カウントイン完了 → 本番フェーズへ遷移。
-          // ただしここでは bar 1 beat 1 のクリックは鳴らさない。
-          // 次の tick (beatMs 後) が phase === "main" / beatIdx === 0 として発火し、
-          // 1拍分ちゃんと空けてから bar 1 beat 1 のクリックを鳴らす。
-          phase = "main";
-          beatIdx = 0;
-          barIdx = 0;
-          ticksDone = 0;
-          done();
-          this.onBarChange({ barIdx: 0, beatIdx: 0, phase, remaining: 0 });
-          this.onStatusChange({ phase, remaining: 0, barIdx: 0, beatIdx: 0 });
+    const totalCountInBeats = countInBeats;
+
+    const scheduleBeat = (beatNum) => {
+      const audioTime = startAudioTime + beatNum * beatSec;
+      const wallMsFromStart = beatNum * 1000 * beatSec;
+      const isCountIn = beatNum < totalCountInBeats;
+      const positionInCountIn = beatNum;
+      const positionInMain = beatNum - totalCountInBeats;
+      const beatInBar = isCountIn
+        ? positionInCountIn % plan_.beatsPerBar
+        : positionInMain % plan_.beatsPerBar;
+      const accent = plan_.accentFirstBeat && beatInBar === 0;
+
+      // オーディオ: ctx.currentTime 基準で正確にクリック予約
+      this.engine.playClickAt(accent, audioTime);
+
+      // UI 用：壁時計ベースでほぼ同時にステータスを更新するタスクを仕込む
+      const uiDelayMs = Math.max(0, (audioTime - ctx.currentTime) * 1000);
+      setTimeout(() => {
+        if (!this.running) return;
+        if (isCountIn) {
+          const remaining = totalCountInBeats - positionInCountIn;
+          this.onStatusChange({ phase: "countin", remaining, barIdx: 0, beatIdx: beatInBar });
+        } else {
+          const mainBeatCounter = positionInMain;
+          const barIdx = Math.floor(mainBeatCounter / plan_.beatsPerBar) % plan_.bars.length;
+          const bIdx = mainBeatCounter % plan_.beatsPerBar;
+          if (bIdx === 0) {
+            this.onBarChange({ barIdx, beatIdx: 0, phase: "main", remaining: 0 });
+            if (barIdx === 0 && mainBeatCounter === 0) {
+              // count-in → main の切り替わりで drone 起動
+              done();
+            }
+          }
+          this.onStatusChange({ phase: "main", remaining: 0, barIdx, beatIdx: bIdx });
         }
-      } else {
-        // main phase
-        const isFirstBeat = beatIdx === 0;
-        const accent = plan_.accentFirstBeat && isFirstBeat;
-        this.engine.playClick(accent);
-        if (isFirstBeat) {
-          this.onBarChange({ barIdx, beatIdx, phase, remaining: 0 });
-        }
-        this.onStatusChange({ phase, remaining: 0, barIdx, beatIdx });
-        beatIdx++;
-        if (beatIdx >= plan_.beatsPerBar) {
-          beatIdx = 0;
-          barIdx = (barIdx + 1) % plan_.bars.length;
-        }
-      }
-
-      if (this.running) {
-        this.timer = setTimeout(tick, beatMs);
-      }
+      }, uiDelayMs);
     };
 
-    // First tick runs immediately for count-in; for main phase we fire immediately too
-    tick();
+    const scheduler = () => {
+      if (!this.running) return;
+      const now = ctx.currentTime;
+      // look-ahead 分までスケジュールする
+      while (startAudioTime + beatCounter * beatSec < now + LOOK_AHEAD_SEC) {
+        scheduleBeat(beatCounter);
+        scheduledThru = beatCounter;
+        beatCounter++;
+        // 安全弁: 1 万拍 (~ 2 時間 @ 80 BPM) で抜けるなど極端なことは不要
+      }
+      this.timer = setTimeout(scheduler, SCHEDULER_INTERVAL_MS);
+    };
+
+    scheduler();
   }
 
   stop() {
     this.running = false;
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
+    // 既に将来時刻に予約済みのクリック音は engine 側でキャンセル
+    this.engine.cancelScheduledClicks();
     this.onStatusChange({ phase: "idle" });
   }
 }
