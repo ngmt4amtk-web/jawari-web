@@ -360,22 +360,17 @@ class Progression {
         this.onStatusChange({ phase, remaining, barIdx: 0, beatIdx: localBeat % plan_.beatsPerBar });
         ticksDone++;
         if (ticksDone >= countInBeats) {
+          // カウントイン完了 → 本番フェーズへ遷移。
+          // ただしここでは bar 1 beat 1 のクリックは鳴らさない。
+          // 次の tick (beatMs 後) が phase === "main" / beatIdx === 0 として発火し、
+          // 1拍分ちゃんと空けてから bar 1 beat 1 のクリックを鳴らす。
           phase = "main";
           beatIdx = 0;
           barIdx = 0;
           ticksDone = 0;
-          // カウントイン完了 → drone 開始
           done();
-          // Immediately at downbeat of bar 0:
-          this.engine.playClick(plan_.accentFirstBeat);
           this.onBarChange({ barIdx: 0, beatIdx: 0, phase, remaining: 0 });
           this.onStatusChange({ phase, remaining: 0, barIdx: 0, beatIdx: 0 });
-          beatIdx = 1;
-          if (beatIdx >= plan_.beatsPerBar) {
-            beatIdx = 0;
-            barIdx = (barIdx + 1) % plan_.bars.length;
-            this.onBarChange({ barIdx, beatIdx: 0, phase, remaining: 0 });
-          }
         }
       } else {
         // main phase
